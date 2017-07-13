@@ -3,6 +3,10 @@ Log.io - Real-time log monitoring in your browser
 
 Powered by [node.js](http://nodejs.org) + [socket.io](http://socket.io)
 
+## So what has changed with this forked version?
+
+- javascript source code (see: [decaffeinate](http://decaffeinate-project.org/))
+- config files are json
 ## How does it work?
 
 *Harvesters* watch log files for changes, send new log messages to the *server* via TCP, which broadcasts to *web clients* via socket.io.
@@ -69,7 +73,7 @@ Remove a node
 
 - [jdrake](http://github.com/jdrake)
 
-## License 
+## License
 
 Copyright 2013 Narrative Science &lt;contrib@narrativescience.com&gt;
 
