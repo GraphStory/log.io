@@ -1,16 +1,23 @@
 #!/usr/bin/env node
-winston = require('winston');
-logging = new winston.Logger({
+/*
+ * decaffeinate suggestions:
+ * DS104: Avoid inline assignments
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+let left;
+const winston = require('winston');
+const logging = new winston.Logger({
   transports: [ new winston.transports.Console({
     level: 'error'
   })]
 });
-homeDir = process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME'];
-webConf = require(homeDir + '/.log.io/web_server.conf').config;
+const homeDir = process.env[((left = process.platform === 'win32')) != null ? left : {'USERPROFILE' : 'HOME'}];
+const webConf = require(homeDir + '/.log.io/web_server.conf').config;
 webConf.logging = logging;
-logConf = require(homeDir + '/.log.io/log_server.conf').config;
+const logConf = require(homeDir + '/.log.io/log_server.conf').config;
 logConf.logging = logging;
-server = require('../index.js');
-logServer = new server.LogServer(logConf);
-webServer = new server.WebServer(logServer, webConf);
+const server = require('../index.js');
+const logServer = new server.LogServer(logConf);
+const webServer = new server.WebServer(logServer, webConf);
 webServer.run();
