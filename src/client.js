@@ -1,8 +1,20 @@
-### Log.io Web Client
+/*
+ * decaffeinate suggestions:
+ * DS001: Remove Babel/TypeScript constructor workaround
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS103: Rewrite code to no longer use __guard__
+ * DS104: Avoid inline assignments
+ * DS204: Change includes calls to have a more natural evaluation order
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+/* Log.io Web Client
 
 Listens to server for new log messages, renders them to screen "widgets".
 
-# Usage:
+* Usage:
 wclient = new WebClient io, host: 'http://localhost:28778'
 screen = wclient.createScreen
 stream = wclient.logStreams.at 0
@@ -10,246 +22,350 @@ node = wclient.logNodes.at 0
 screen.addPair stream, node
 screen.on 'new_log', (stream, node, level, message) ->
 
-###
+*/
 
-if process.browser
-  $ = require 'jquery-browserify'
-else
-  $ = eval "require('jquery')"
-backbone = require 'backbone'
-backbone.$ = $
-io = require 'socket.io-client'
-_ = require 'underscore'
-templates = require './templates'
+let $;
+if (process.browser) {
+  $ = require('jquery-browserify');
+} else {
+  $ = eval("require('jquery')");
+}
+const backbone = require('backbone');
+backbone.$ = $;
+const io = require('socket.io-client');
+const _ = require('underscore');
+const templates = require('./templates');
 
-# Cap LogMessages collection size
-MESSAGE_CAP = 5000
+// Cap LogMessages collection size
+const MESSAGE_CAP = 5000;
 
-###
+/*
 ColorManager acts as a circular queue for color values.
 Every new Stream or Node is assigned a color value on instantiation.
 
-###
+*/
 
-class ColorManager
-  _max: 20
-  constructor: (@_index=1) ->
-  next: ->
-    @_index = 1 if @_index is @_max
-    @_index++;
+class ColorManager {
+  static initClass() {
+    this.prototype._max = 20;
+  }
+  constructor(_index) {
+    if (_index == null) { _index = 1; }
+    this._index = _index;
+  }
+  next() {
+    if (this._index === this._max) { this._index = 1; }
+    return this._index++;
+  }
+}
+ColorManager.initClass();
 
-colors = new ColorManager
+const colors = new ColorManager;
 
-###
+/*
 Backbone models are used to represent nodes and streams.  When nodes
 go offline, their LogNode model is destroyed, along with their
 stream assocations.
 
-###
+*/
 
-class _LogObject extends backbone.Model
-  idAttribute: 'name'
-  _pclass: -> new _LogObjects
-  sync: (args...) ->
-  constructor: (args...) ->
-    super args...
-    @screens = new LogScreens
-    @pairs = @_pclass()
-    @color = colors.next()
+class _LogObject extends backbone.Model {
+  static initClass() {
+    this.prototype.idAttribute = 'name';
+  }
+  _pclass() { return new _LogObjects; }
+  sync(...args) {}
+  constructor(...args) {
+    super(...Array.from(args || []));
+    this.screens = new LogScreens;
+    this.pairs = this._pclass();
+    this.color = colors.next();
+  }
+}
+_LogObject.initClass();
 
-class _LogObjects extends backbone.Collection
-  model: _LogObject
-  comparator: (obj) ->
-    obj.get 'name'
+class _LogObjects extends backbone.Collection {
+  static initClass() {
+    this.prototype.model = _LogObject;
+  }
+  comparator(obj) {
+    return obj.get('name');
+  }
+}
+_LogObjects.initClass();
 
-class LogStream extends _LogObject
-  _pclass: -> new LogNodes
+class LogStream extends _LogObject {
+  _pclass() { return new LogNodes; }
+}
 
-class LogStreams extends _LogObjects
-  model: LogStream
+class LogStreams extends _LogObjects {
+  static initClass() {
+    this.prototype.model = LogStream;
+  }
+}
+LogStreams.initClass();
 
-class LogNode extends _LogObject
-  _pclass: -> new LogStreams
+class LogNode extends _LogObject {
+  _pclass() { return new LogStreams; }
+}
 
-class LogNodes extends _LogObjects
-  model: LogNode
+class LogNodes extends _LogObjects {
+  static initClass() {
+    this.prototype.model = LogNode;
+  }
+}
+LogNodes.initClass();
 
-class LogMessage extends backbone.Model
-  ROPEN = new RegExp '<','ig'
-  RCLOSE = new RegExp '>','ig'
-  render_message: ->
-    @get('message').replace(ROPEN, '&lt;').replace(RCLOSE, '&gt;')
+var LogMessage = (function() {
+  let ROPEN = undefined;
+  let RCLOSE = undefined;
+  LogMessage = class LogMessage extends backbone.Model {
+    static initClass() {
+      ROPEN = new RegExp('<','ig');
+      RCLOSE = new RegExp('>','ig');
+    }
+    render_message() {
+      return this.get('message').replace(ROPEN, '&lt;').replace(RCLOSE, '&gt;');
+    }
+  };
+  LogMessage.initClass();
+  return LogMessage;
+})();
 
-class LogMessages extends backbone.Collection
-  model: LogMessage
-  constructor: (args...) ->
-    super args...
-    @on 'add', @_capped
+class LogMessages extends backbone.Collection {
+  static initClass() {
+    this.prototype.model = LogMessage;
+  }
+  constructor(...args) {
+    {
+      // Hack: trick Babel/TypeScript into allowing this before super.
+      if (false) { super(); }
+      let thisFn = (() => { this; }).toString();
+      let thisName = thisFn.slice(thisFn.indexOf('{') + 1, thisFn.indexOf(';')).trim();
+      eval(`${thisName} = this;`);
+    }
+    this._capped = this._capped.bind(this);
+    super(...Array.from(args || []));
+    this.on('add', this._capped);
+  }
 
-  _capped: =>
-    @remove @at (@length - MESSAGE_CAP) if @length > MESSAGE_CAP
+  _capped() {
+    if (this.length > MESSAGE_CAP) { return this.remove(this.at((this.length - MESSAGE_CAP))); }
+  }
+}
+LogMessages.initClass();
 
 
-###
+/*
 LogScreen models maintain state for screen widgets in the UI.
 When (Stream, Node) pairs are associated with a screen, the pair ID
 is stored on the model.  It uses pair ID instead of models themselves
 in case a node goes offline, and a new LogNode model is created.
 
-###
-class LogScreen extends backbone.Model
-  idAttribute: null
-  defaults: ->
-    pairIds: []
-  constructor: (args...) ->
-    super args...
-    @logMessages = new LogMessages
+*/
+class LogScreen extends backbone.Model {
+  static initClass() {
+    this.prototype.idAttribute = null;
+  }
+  defaults() {
+    return {pairIds: []};
+  }
+  constructor(...args) {
+    super(...Array.from(args || []));
+    this.logMessages = new LogMessages;
+  }
 
-  addPair: (stream, node) ->
-    pairIds = @get 'pairIds'
-    pid = @_pid stream, node
-    pairIds.push pid if pid not in pairIds
-    stream.trigger 'lwatch', node, @
-    node.trigger 'lwatch', stream, @
-    stream.screens.update @
-    node.screens.update @
-    @collection.trigger 'addPair'
+  addPair(stream, node) {
+    const pairIds = this.get('pairIds');
+    const pid = this._pid(stream, node);
+    if (!Array.from(pairIds).includes(pid)) { pairIds.push(pid); }
+    stream.trigger('lwatch', node, this);
+    node.trigger('lwatch', stream, this);
+    stream.screens.update(this);
+    node.screens.update(this);
+    return this.collection.trigger('addPair');
+  }
 
-  removePair: (stream, node) ->
-    pairIds = @get 'pairIds'
-    pid = @_pid stream, node
-    @set 'pairIds', (p for p in pairIds when p isnt pid)
-    stream.trigger 'lunwatch', node, @
-    node.trigger 'lunwatch', stream, @
-    stream.screens.remove @
-    node.screens.remove @
-    @collection.trigger 'removePair'
+  removePair(stream, node) {
+    const pairIds = this.get('pairIds');
+    const pid = this._pid(stream, node);
+    this.set('pairIds', (Array.from(pairIds).filter((p) => p !== pid)));
+    stream.trigger('lunwatch', node, this);
+    node.trigger('lunwatch', stream, this);
+    stream.screens.remove(this);
+    node.screens.remove(this);
+    return this.collection.trigger('removePair');
+  }
 
-  hasPair: (stream, node) ->
-    pid = @_pid stream, node
-    pid in @get 'pairIds'
+  hasPair(stream, node) {
+    let needle;
+    const pid = this._pid(stream, node);
+    return (needle = pid, Array.from(this.get('pairIds')).includes(needle));
+  }
 
-  _pid: (stream, node) -> "#{stream.id}:#{node.id}"
+  _pid(stream, node) { return `${stream.id}:${node.id}`; }
 
-  isActive: (object, getPair) ->
-    # Returns true if all object pairs are activated on screen
-    return false if not object.pairs.length
-    object.pairs.every (item) =>
-      [stream, node] = getPair object, item
-      @hasPair stream, node
+  isActive(object, getPair) {
+    // Returns true if all object pairs are activated on screen
+    if (!object.pairs.length) { return false; }
+    return object.pairs.every(item => {
+      const [stream, node] = Array.from(getPair(object, item));
+      return this.hasPair(stream, node);
+    });
+  }
+}
+LogScreen.initClass();
 
-class LogScreens extends backbone.Collection
-  model: LogScreen
+class LogScreens extends backbone.Collection {
+  static initClass() {
+    this.prototype.model = LogScreen;
+  }
+}
+LogScreens.initClass();
 
-###
+/*
 WebClient listens for log messages and stream/node announcements
 from the server via socket.io.  It manipulates state in LogNodes &
 LogStreams collections, which triggers view events.
 
-###
+*/
 
-class WebClient
-  constructor: (opts={host: '', secure: false}, @localStorage={}) ->
-    @stats =
-      nodes: 0
-      streams: 0
-      messages: 0
+class WebClient {
+  constructor(opts, localStorage) {
+    this._initScreens = this._initScreens.bind(this);
+    this._addNode = this._addNode.bind(this);
+    this._addStream = this._addStream.bind(this);
+    this._removeNode = this._removeNode.bind(this);
+    this._removeStream = this._removeStream.bind(this);
+    this._addPair = this._addPair.bind(this);
+    this._newLog = this._newLog.bind(this);
+    this._ping = this._ping.bind(this);
+    this._disconnect = this._disconnect.bind(this);
+    if (opts == null) { opts = {host: '', secure: false}; }
+    if (localStorage == null) { localStorage = {}; }
+    this.localStorage = localStorage;
+    this.stats = {
+      nodes: 0,
+      streams: 0,
+      messages: 0,
       start: new Date().getTime()
-    @logNodes = new LogNodes
-    @logStreams = new LogStreams
-    @logScreens = new LogScreens
-    @app = new ClientApplication
-      logNodes: @logNodes
-      logStreams: @logStreams
-      logScreens: @logScreens
-      webClient: @
-    @app.render()
-    @_initScreens()
-    @socket = io.connect opts.host, secure: opts.secure
-    _on = (args...) => @socket.on args...
+    };
+    this.logNodes = new LogNodes;
+    this.logStreams = new LogStreams;
+    this.logScreens = new LogScreens;
+    this.app = new ClientApplication({
+      logNodes: this.logNodes,
+      logStreams: this.logStreams,
+      logScreens: this.logScreens,
+      webClient: this
+    });
+    this.app.render();
+    this._initScreens();
+    this.socket = io.connect(opts.host, {secure: opts.secure});
+    const _on = (...args) => this.socket.on(...Array.from(args || []));
 
-    # Bind to socket events from server
-    _on 'add_node', @_addNode
-    _on 'add_stream', @_addStream
-    _on 'remove_node', @_removeNode
-    _on 'remove_stream', @_removeStream
-    _on 'add_pair', @_addPair
-    _on 'new_log', @_newLog
-    _on 'ping', @_ping
-    _on 'disconnect', @_disconnect
+    // Bind to socket events from server
+    _on('add_node', this._addNode);
+    _on('add_stream', this._addStream);
+    _on('remove_node', this._removeNode);
+    _on('remove_stream', this._removeStream);
+    _on('add_pair', this._addPair);
+    _on('new_log', this._newLog);
+    _on('ping', this._ping);
+    _on('disconnect', this._disconnect);
+  }
 
-  _initScreens: =>
-    @logScreens.on 'add remove addPair removePair', =>
-      @localStorage['logScreens'] = JSON.stringify @logScreens.toJSON()
-    screenCache = @localStorage['logScreens']
-    screens = if screenCache then JSON.parse(screenCache) else [{name: 'Screen1'}]
-    @logScreens.add new @logScreens.model screen for screen in screens
+  _initScreens() {
+    this.logScreens.on('add remove addPair removePair', () => {
+      return this.localStorage['logScreens'] = JSON.stringify(this.logScreens.toJSON());
+    });
+    const screenCache = this.localStorage['logScreens'];
+    const screens = screenCache ? JSON.parse(screenCache) : [{name: 'Screen1'}];
+    return Array.from(screens).map((screen) => this.logScreens.add(new this.logScreens.model(screen)));
+  }
 
-  _addNode: (node) =>
-    @logNodes.add node
-    @stats.nodes++
+  _addNode(node) {
+    this.logNodes.add(node);
+    return this.stats.nodes++;
+  }
 
-  _addStream: (stream) =>
-    @logStreams.add stream
-    @stats.streams++
-    stream = @logStreams.get stream.name
-    stream.on 'lwatch', (node, screen) =>
-      @socket.emit 'watch', screen._pid stream, node
-    stream.on 'lunwatch', (node, screen) =>
-      @socket.emit 'unwatch', screen._pid stream, node
+  _addStream(stream) {
+    this.logStreams.add(stream);
+    this.stats.streams++;
+    stream = this.logStreams.get(stream.name);
+    stream.on('lwatch', (node, screen) => {
+      return this.socket.emit('watch', screen._pid(stream, node));
+    });
+    return stream.on('lunwatch', (node, screen) => {
+      return this.socket.emit('unwatch', screen._pid(stream, node));
+    });
+  }
 
-  _removeNode: (node) =>
-    @logNodes.get(node.name)?.destroy()
-    @stats.nodes--
+  _removeNode(node) {
+    __guard__(this.logNodes.get(node.name), x => x.destroy());
+    return this.stats.nodes--;
+  }
 
-  _removeStream: (stream) =>
-    @logStreams.get(stream.name)?.destroy()
-    @stats.streams--
+  _removeStream(stream) {
+    __guard__(this.logStreams.get(stream.name), x => x.destroy());
+    return this.stats.streams--;
+  }
 
-  _addPair: (p) =>
-    stream = @logStreams.get p.stream
-    node = @logNodes.get p.node
-    stream.pairs.add node
-    node.pairs.add stream
-    @logScreens.each (screen) ->
-      screen.addPair stream, node if screen.hasPair stream, node
+  _addPair(p) {
+    const stream = this.logStreams.get(p.stream);
+    const node = this.logNodes.get(p.node);
+    stream.pairs.add(node);
+    node.pairs.add(stream);
+    return this.logScreens.each(function(screen) {
+      if (screen.hasPair(stream, node)) { return screen.addPair(stream, node); }
+    });
+  }
 
-  _newLog: (msg) =>
-    {stream, node, level, message} = msg
-    stream = @logStreams.get stream
-    node = @logNodes.get node
-    @logScreens.each (screen) ->
-      if screen.hasPair stream, node
-        screen.trigger 'new_log', new LogMessage
-          stream: stream
-          node: node
-          level: level
-          message: message
+  _newLog(msg) {
+    let {stream, node, level, message} = msg;
+    stream = this.logStreams.get(stream);
+    node = this.logNodes.get(node);
+    return this.logScreens.each(function(screen) {
+      if (screen.hasPair(stream, node)) {
+        return screen.trigger('new_log', new LogMessage({
+          stream,
+          node,
+          level,
+          message
+        })
+        );
+      }
+    });
+  }
 
-  _ping: (msg) =>
-    {stream, node} = msg
-    stream = @logStreams.get stream
-    node = @logNodes.get node
-    stream.trigger 'ping', node if stream
-    node.trigger 'ping', stream if node
-    @stats.messages++
+  _ping(msg) {
+    let {stream, node} = msg;
+    stream = this.logStreams.get(stream);
+    node = this.logNodes.get(node);
+    if (stream) { stream.trigger('ping', node); }
+    if (node) { node.trigger('ping', stream); }
+    return this.stats.messages++;
+  }
 
-  _disconnect: =>
-    @logNodes.reset()
-    @logStreams.reset()
-    @stats.nodes = 0
-    @stats.streams = 0
+  _disconnect() {
+    this.logNodes.reset();
+    this.logStreams.reset();
+    this.stats.nodes = 0;
+    return this.stats.streams = 0;
+  }
 
-  createScreen: (sname) ->
-    screen = new LogScreen name: sname
-    @logScreens.add screen
-    screen
+  createScreen(sname) {
+    const screen = new LogScreen({name: sname});
+    this.logScreens.add(screen);
+    return screen;
+  }
+}
 
-###
+/*
 Backbone views are used to manage the UI components,
 including the list of log nodes and screen panels.
 
-# View heirarchy:
+* View heirarchy:
 ClientApplication
   LogControlPanel
     ObjectControls
@@ -261,346 +377,571 @@ ClientApplication
 
 TODO(msmathers): Build templates, fill out render() methods
 
-###
+*/
 
-class ClientApplication extends backbone.View
-  el: '#web_client'
-  template: _.template templates.clientApplication
-  initialize: (opts) ->
-    {@logNodes, @logStreams, @logScreens, @webClient} = opts
-    @controls = new LogControlPanel
-      logNodes: @logNodes
-      logStreams: @logStreams
-      logScreens: @logScreens
-    @screens = new LogScreensPanel
-      logScreens: @logScreens
-      webClient: @webClient
-    $(window).resize @_resize if window?
-    @listenTo @logScreens, 'add remove', @_resize
+class ClientApplication extends backbone.View {
+  constructor(...args) {
+    {
+      // Hack: trick Babel/TypeScript into allowing this before super.
+      if (false) { super(); }
+      let thisFn = (() => { this; }).toString();
+      let thisName = thisFn.slice(thisFn.indexOf('{') + 1, thisFn.indexOf(';')).trim();
+      eval(`${thisName} = this;`);
+    }
+    this._resize = this._resize.bind(this);
+    super(...args);
+  }
 
-  _resize: =>
-    return if not window?
-    width = $(window).width() - @$el.find("#log_controls").width()
-    @$el.find("#log_screens").width width
+  static initClass() {
+    this.prototype.el = '#web_client';
+    this.prototype.template = _.template(templates.clientApplication);
+  }
+  initialize(opts) {
+    ({logNodes: this.logNodes, logStreams: this.logStreams, logScreens: this.logScreens, webClient: this.webClient} = opts);
+    this.controls = new LogControlPanel({
+      logNodes: this.logNodes,
+      logStreams: this.logStreams,
+      logScreens: this.logScreens
+    });
+    this.screens = new LogScreensPanel({
+      logScreens: this.logScreens,
+      webClient: this.webClient
+    });
+    if (typeof window !== 'undefined' && window !== null) { $(window).resize(this._resize); }
+    return this.listenTo(this.logScreens, 'add remove', this._resize);
+  }
 
-  render: ->
-    @$el.html @template()
-    @$el.append @controls.render().el
-    @$el.append @screens.render().el
-    @_resize()
-    @
+  _resize() {
+    if ((typeof window === 'undefined' || window === null)) { return; }
+    const width = $(window).width() - this.$el.find("#log_controls").width();
+    return this.$el.find("#log_screens").width(width);
+  }
 
-class LogControlPanel extends backbone.View
-  id: 'log_controls'
-  template: _.template templates.logControlPanel
-  initialize: (opts) ->
-    {@logNodes, @logStreams, @logScreens} = opts
-    @streams = new ObjectControls
-      objects: @logStreams
-      logScreens: @logScreens
-      getPair: (object, item) -> [object, item]
+  render() {
+    this.$el.html(this.template());
+    this.$el.append(this.controls.render().el);
+    this.$el.append(this.screens.render().el);
+    this._resize();
+    return this;
+  }
+}
+ClientApplication.initClass();
+
+class LogControlPanel extends backbone.View {
+  constructor(...args) {
+    {
+      // Hack: trick Babel/TypeScript into allowing this before super.
+      if (false) { super(); }
+      let thisFn = (() => { this; }).toString();
+      let thisName = thisFn.slice(thisFn.indexOf('{') + 1, thisFn.indexOf(';')).trim();
+      eval(`${thisName} = this;`);
+    }
+    this._toggleMode = this._toggleMode.bind(this);
+    super(...args);
+  }
+
+  static initClass() {
+    this.prototype.id = 'log_controls';
+    this.prototype.template = _.template(templates.logControlPanel);
+  
+    this.prototype.events =
+      {"click a.select_mode": "_toggleMode"};
+  }
+  initialize(opts) {
+    ({logNodes: this.logNodes, logStreams: this.logStreams, logScreens: this.logScreens} = opts);
+    this.streams = new ObjectControls({
+      objects: this.logStreams,
+      logScreens: this.logScreens,
+      getPair(object, item) { return [object, item]; },
       id: 'log_control_streams'
-    @nodes = new ObjectControls
-      objects: @logNodes
-      logScreens: @logScreens
-      getPair: (object, item) -> [item, object]
-      id: 'log_control_nodes'
-      attributes:
+    });
+    return this.nodes = new ObjectControls({
+      objects: this.logNodes,
+      logScreens: this.logScreens,
+      getPair(object, item) { return [item, object]; },
+      id: 'log_control_nodes',
+      attributes: {
         style: 'display: none'
+      }
+    });
+  }
 
-  events:
-    "click a.select_mode": "_toggleMode"
+  _toggleMode(e) {
+    const target = $(e.currentTarget);
+    target.addClass('active').siblings().removeClass('active');
+    const tid = target.attr('href');
+    this.$el.find(tid).show().siblings('.object_controls').hide();
+    return false;
+  }
 
-  _toggleMode: (e) =>
-    target = $ e.currentTarget
-    target.addClass('active').siblings().removeClass 'active'
-    tid = target.attr 'href'
-    @$el.find(tid).show().siblings('.object_controls').hide()
-    false
+  render() {
+    this.$el.html(this.template());
+    this.$el.append(this.streams.render().el);
+    this.$el.append(this.nodes.render().el);
+    return this;
+  }
+}
+LogControlPanel.initClass();
 
-  render: ->
-    @$el.html @template()
-    @$el.append @streams.render().el
-    @$el.append @nodes.render().el
-    @
+class ObjectControls extends backbone.View {
+  constructor(...args) {
+    {
+      // Hack: trick Babel/TypeScript into allowing this before super.
+      if (false) { super(); }
+      let thisFn = (() => { this; }).toString();
+      let thisName = thisFn.slice(thisFn.indexOf('{') + 1, thisFn.indexOf(';')).trim();
+      eval(`${thisName} = this;`);
+    }
+    this._addObject = this._addObject.bind(this);
+    this._filter = this._filter.bind(this);
+    this._resize = this._resize.bind(this);
+    super(...args);
+  }
 
-class ObjectControls extends backbone.View
-  className: 'object_controls'
-  template: _.template templates.objectControls
-  initialize: (opts) ->
-    {@objects, @getPair, @logScreens} = opts
-    @listenTo @objects, 'add', @_addObject
-    @listenTo @objects, 'reset', => @render()
-    $(window).resize @_resize if window?
-    @filter = null
+  static initClass() {
+    this.prototype.className = 'object_controls';
+    this.prototype.template = _.template(templates.objectControls);
+  }
+  initialize(opts) {
+    ({objects: this.objects, getPair: this.getPair, logScreens: this.logScreens} = opts);
+    this.listenTo(this.objects, 'add', this._addObject);
+    this.listenTo(this.objects, 'reset', () => this.render());
+    if (typeof window !== 'undefined' && window !== null) { $(window).resize(this._resize); }
+    return this.filter = null;
+  }
 
-  _addObject: (obj) =>
-    @_insertObject new ObjectGroupControls
-      object: obj
-      getPair: @getPair
-      logScreens: @logScreens
+  _addObject(obj) {
+    return this._insertObject(new ObjectGroupControls({
+      object: obj,
+      getPair: this.getPair,
+      logScreens: this.logScreens
+    })
+    );
+  }
 
-  _insertObject: (view) ->
-    view._filter @filter if @filter
-    view.render()
-    index = @objects.indexOf view.object
-    if index > 0
-      view.$el.insertAfter @$el.find "div.groups div.group:eq(#{index - 1})"
-    else
-      @$el.find("div.groups").prepend view.el
+  _insertObject(view) {
+    if (this.filter) { view._filter(this.filter); }
+    view.render();
+    const index = this.objects.indexOf(view.object);
+    if (index > 0) {
+      return view.$el.insertAfter(this.$el.find(`div.groups div.group:eq(${index - 1})`));
+    } else {
+      return this.$el.find("div.groups").prepend(view.el);
+    }
+  }
 
-  _filter: (e) =>
-    input = $ e.currentTarget
-    filter = input.val()
-    @filter = if filter then new RegExp "(#{filter})", 'ig' else null
-    @objects.trigger 'ui_filter', @filter
+  _filter(e) {
+    const input = $(e.currentTarget);
+    const filter = input.val();
+    this.filter = filter ? new RegExp(`(${filter})`, 'ig') : null;
+    return this.objects.trigger('ui_filter', this.filter);
+  }
 
-  _resize: =>
-    return if not window?
-    height = $(window).height()
-    @$el.find(".groups").height height - 80;
+  _resize() {
+    if ((typeof window === 'undefined' || window === null)) { return; }
+    const height = $(window).height();
+    return this.$el.find(".groups").height(height - 80);
+  }
 
-  render: ->
-    @$el.html @template
-      title: @id
-    @$el.find('.filter').keyup @_filter
-    @_resize()
-    @
+  render() {
+    this.$el.html(this.template({
+      title: this.id})
+    );
+    this.$el.find('.filter').keyup(this._filter);
+    this._resize();
+    return this;
+  }
+}
+ObjectControls.initClass();
 
-class ObjectGroupControls extends backbone.View
-  className: 'group'
-  template: _.template templates.objectGroupControls
-  initialize: (opts) ->
-    {@object, @getPair, @logScreens} = opts
-    @object.pairs.each @_addItem
-    @listenTo @object.pairs, 'add', @_addItem
-    @listenTo @object, 'destroy', => @remove()
-    @listenTo @object.collection, 'ui_filter', @_filter
-    @header_view = new ObjectGroupHeader
-      object: @object
-      getPair: @getPair
-      logScreens: @logScreens
-    @header_view.render()
+class ObjectGroupControls extends backbone.View {
+  constructor(...args) {
+    {
+      // Hack: trick Babel/TypeScript into allowing this before super.
+      if (false) { super(); }
+      let thisFn = (() => { this; }).toString();
+      let thisName = thisFn.slice(thisFn.indexOf('{') + 1, thisFn.indexOf(';')).trim();
+      eval(`${thisName} = this;`);
+    }
+    this._filter = this._filter.bind(this);
+    this._addItem = this._addItem.bind(this);
+    super(...args);
+  }
 
-  _filter: (filter) =>
-    if filter and not @object.get('name').match filter
-      @$el.hide()
-    else
-      @$el.show()
+  static initClass() {
+    this.prototype.className = 'group';
+    this.prototype.template = _.template(templates.objectGroupControls);
+  }
+  initialize(opts) {
+    ({object: this.object, getPair: this.getPair, logScreens: this.logScreens} = opts);
+    this.object.pairs.each(this._addItem);
+    this.listenTo(this.object.pairs, 'add', this._addItem);
+    this.listenTo(this.object, 'destroy', () => this.remove());
+    this.listenTo(this.object.collection, 'ui_filter', this._filter);
+    this.header_view = new ObjectGroupHeader({
+      object: this.object,
+      getPair: this.getPair,
+      logScreens: this.logScreens
+    });
+    return this.header_view.render();
+  }
 
-  _addItem: (pair) =>
-    @_insertItem new ObjectItemControls
-      item: pair
-      getPair: @getPair
-      object: @object
-      logScreens: @logScreens
+  _filter(filter) {
+    if (filter && !this.object.get('name').match(filter)) {
+      return this.$el.hide();
+    } else {
+      return this.$el.show();
+    }
+  }
 
-  _insertItem: (view) ->
-    view.render()
-    index = @object.pairs.indexOf view.item
-    if index > 0
-      view.$el.insertAfter @$el.find "div.items div.item:eq(#{index - 1})"
-    else
-      @$el.find("div.items").prepend view.el
+  _addItem(pair) {
+    return this._insertItem(new ObjectItemControls({
+      item: pair,
+      getPair: this.getPair,
+      object: this.object,
+      logScreens: this.logScreens
+    })
+    );
+  }
 
-  render: ->
-    @$el.html @template
-    @$el.prepend @header_view.el
-    @
+  _insertItem(view) {
+    view.render();
+    const index = this.object.pairs.indexOf(view.item);
+    if (index > 0) {
+      return view.$el.insertAfter(this.$el.find(`div.items div.item:eq(${index - 1})`));
+    } else {
+      return this.$el.find("div.items").prepend(view.el);
+    }
+  }
 
-class ObjectGroupHeader extends backbone.View
-  className: 'header'
-  template: _.template templates.objectGroupHeader
+  render() {
+    this.$el.html(this.template);
+    this.$el.prepend(this.header_view.el);
+    return this;
+  }
+}
+ObjectGroupControls.initClass();
 
-  initialize: (opts) ->
-    {@object, @getPair, @logScreens} = opts
-    @listenTo @logScreens, 'add remove', => @render()
-    @listenTo @object, 'destroy', => @remove()
-    @listenTo @object, 'lwatch lunwatch', => @render()
-    @listenTo @object.collection, 'add', => @render()
-    @listenTo @object, 'ping', @_ping
+class ObjectGroupHeader extends backbone.View {
+  constructor(...args) {
+    {
+      // Hack: trick Babel/TypeScript into allowing this before super.
+      if (false) { super(); }
+      let thisFn = (() => { this; }).toString();
+      let thisName = thisFn.slice(thisFn.indexOf('{') + 1, thisFn.indexOf(';')).trim();
+      eval(`${thisName} = this;`);
+    }
+    this._toggleScreen = this._toggleScreen.bind(this);
+    this._ping = this._ping.bind(this);
+    this.render = this.render.bind(this);
+    super(...args);
+  }
 
-  events:
-    "click input": "_toggleScreen"
+  static initClass() {
+    this.prototype.className = 'header';
+    this.prototype.template = _.template(templates.objectGroupHeader);
+  
+    this.prototype.events =
+      {"click input": "_toggleScreen"};
+  }
 
-  _toggleScreen: (e) =>
-    checkbox = $ e.currentTarget
-    screen_id = checkbox.attr('title').replace /screen-/ig, ''
-    screen = @logScreens.get screen_id
-    @object.pairs.forEach (item) =>
-      [stream, node] = @getPair @object, item
-      if checkbox.is ':checked'
-        screen.addPair stream, node
-      else
-        screen.removePair stream, node
+  initialize(opts) {
+    ({object: this.object, getPair: this.getPair, logScreens: this.logScreens} = opts);
+    this.listenTo(this.logScreens, 'add remove', () => this.render());
+    this.listenTo(this.object, 'destroy', () => this.remove());
+    this.listenTo(this.object, 'lwatch lunwatch', () => this.render());
+    this.listenTo(this.object.collection, 'add', () => this.render());
+    return this.listenTo(this.object, 'ping', this._ping);
+  }
 
-  _ping: =>
-    @diode.addClass 'ping'
-    setTimeout (=> @diode.removeClass 'ping'), 20
+  _toggleScreen(e) {
+    const checkbox = $(e.currentTarget);
+    const screen_id = checkbox.attr('title').replace(/screen-/ig, '');
+    const screen = this.logScreens.get(screen_id);
+    return this.object.pairs.forEach(item => {
+      const [stream, node] = Array.from(this.getPair(this.object, item));
+      if (checkbox.is(':checked')) {
+        return screen.addPair(stream, node);
+      } else {
+        return screen.removePair(stream, node);
+      }
+    });
+  }
 
-  render: =>
-    @$el.html @template
-      getPair: @getPair
-      object: @object
-      logScreens: @logScreens
-    @diode = @$el.find '.diode'
-    @
+  _ping() {
+    this.diode.addClass('ping');
+    return setTimeout((() => this.diode.removeClass('ping')), 20);
+  }
 
-class ObjectItemControls extends backbone.View
-  className: 'item'
-  template: _.template templates.objectItemControls
-  initialize: (opts) ->
-    {@item, @object, @logScreens} = opts
-    [@stream, @node] = opts.getPair @object, @item
-    @listenTo @logScreens, 'add remove', => @render()
-    @listenTo @item, 'destroy', => @remove()
-    @listenTo @stream, 'lwatch lunwatch', => @render()
-    @listenTo @item, 'ping', @_ping
+  render() {
+    this.$el.html(this.template({
+      getPair: this.getPair,
+      object: this.object,
+      logScreens: this.logScreens
+    })
+    );
+    this.diode = this.$el.find('.diode');
+    return this;
+  }
+}
+ObjectGroupHeader.initClass();
 
-  events:
-    "click input": "_toggleScreen"
+class ObjectItemControls extends backbone.View {
+  constructor(...args) {
+    {
+      // Hack: trick Babel/TypeScript into allowing this before super.
+      if (false) { super(); }
+      let thisFn = (() => { this; }).toString();
+      let thisName = thisFn.slice(thisFn.indexOf('{') + 1, thisFn.indexOf(';')).trim();
+      eval(`${thisName} = this;`);
+    }
+    this._toggleScreen = this._toggleScreen.bind(this);
+    this._ping = this._ping.bind(this);
+    super(...args);
+  }
 
-  _toggleScreen: (e) =>
-    checkbox = $ e.currentTarget
-    screen_id = checkbox.attr('title').replace /screen-/ig, ''
-    screen = @logScreens.get screen_id
-    if checkbox.is ':checked'
-      screen.addPair @stream, @node
-    else
-      screen.removePair @stream, @node
+  static initClass() {
+    this.prototype.className = 'item';
+    this.prototype.template = _.template(templates.objectItemControls);
+  
+    this.prototype.events =
+      {"click input": "_toggleScreen"};
+  }
+  initialize(opts) {
+    ({item: this.item, object: this.object, logScreens: this.logScreens} = opts);
+    [this.stream, this.node] = Array.from(opts.getPair(this.object, this.item));
+    this.listenTo(this.logScreens, 'add remove', () => this.render());
+    this.listenTo(this.item, 'destroy', () => this.remove());
+    this.listenTo(this.stream, 'lwatch lunwatch', () => this.render());
+    return this.listenTo(this.item, 'ping', this._ping);
+  }
 
-  _ping: (object) =>
-    if object is @object
-      @diode.addClass 'ping'
-      setTimeout (=> @diode.removeClass 'ping'), 20
+  _toggleScreen(e) {
+    const checkbox = $(e.currentTarget);
+    const screen_id = checkbox.attr('title').replace(/screen-/ig, '');
+    const screen = this.logScreens.get(screen_id);
+    if (checkbox.is(':checked')) {
+      return screen.addPair(this.stream, this.node);
+    } else {
+      return screen.removePair(this.stream, this.node);
+    }
+  }
 
-  render: ->
-    @$el.html @template
-      item: @item
-      stream: @stream
-      node: @node
-      logScreens: @logScreens
-    @diode = @$el.find '.diode'
-    @
+  _ping(object) {
+    if (object === this.object) {
+      this.diode.addClass('ping');
+      return setTimeout((() => this.diode.removeClass('ping')), 20);
+    }
+  }
 
-class LogScreensPanel extends backbone.View
-  template: _.template templates.logScreensPanel
-  id: 'log_screens'
-  initialize: (opts) ->
-    {@logScreens, @webClient} = opts
-    @listenTo @logScreens, 'add', @_addLogScreen
-    @listenTo @logScreens, 'add remove', @_resize
-    $(window).resize @_resize if window?
-    @statsView = new LogStatsView stats: @webClient.stats
+  render() {
+    this.$el.html(this.template({
+      item: this.item,
+      stream: this.stream,
+      node: this.node,
+      logScreens: this.logScreens
+    })
+    );
+    this.diode = this.$el.find('.diode');
+    return this;
+  }
+}
+ObjectItemControls.initClass();
 
-  events:
-    "click #new_screen_button": "_newScreen"
+class LogScreensPanel extends backbone.View {
+  constructor(...args) {
+    {
+      // Hack: trick Babel/TypeScript into allowing this before super.
+      if (false) { super(); }
+      let thisFn = (() => { this; }).toString();
+      let thisName = thisFn.slice(thisFn.indexOf('{') + 1, thisFn.indexOf(';')).trim();
+      eval(`${thisName} = this;`);
+    }
+    this._addLogScreen = this._addLogScreen.bind(this);
+    this._resize = this._resize.bind(this);
+    super(...args);
+  }
 
-  _newScreen: (e) ->
-    @logScreens.add new @logScreens.model name: 'Screen1'
-    false
+  static initClass() {
+    this.prototype.template = _.template(templates.logScreensPanel);
+    this.prototype.id = 'log_screens';
+  
+    this.prototype.events =
+      {"click #new_screen_button": "_newScreen"};
+  }
+  initialize(opts) {
+    ({logScreens: this.logScreens, webClient: this.webClient} = opts);
+    this.listenTo(this.logScreens, 'add', this._addLogScreen);
+    this.listenTo(this.logScreens, 'add remove', this._resize);
+    if (typeof window !== 'undefined' && window !== null) { $(window).resize(this._resize); }
+    return this.statsView = new LogStatsView({stats: this.webClient.stats});
+  }
 
-  _addLogScreen: (screen) =>
-    view = new LogScreenView
-      logScreens: @logScreens
+  _newScreen(e) {
+    this.logScreens.add(new this.logScreens.model({name: 'Screen1'}));
+    return false;
+  }
+
+  _addLogScreen(screen) {
+    const view = new LogScreenView({
+      logScreens: this.logScreens,
       logScreen: screen
-    @$el.find("div.log_screens").append view.render().el
-    false
+    });
+    this.$el.find("div.log_screens").append(view.render().el);
+    return false;
+  }
 
-  _resize: =>
-    return if not window?
-    lscreens = @logScreens
-    if lscreens.length
-      height = $(window).height() - @$el.find("div.status_bar").height() - 10
-      @$el.find(".log_screen .messages").each ->
-        $(@).height (height/lscreens.length) - 12
+  _resize() {
+    if ((typeof window === 'undefined' || window === null)) { return; }
+    const lscreens = this.logScreens;
+    if (lscreens.length) {
+      const height = $(window).height() - this.$el.find("div.status_bar").height() - 10;
+      return this.$el.find(".log_screen .messages").each(function() {
+        return $(this).height((height/lscreens.length) - 12);
+      });
+    }
+  }
 
-  render: ->
-    @$el.html @template()
-    @$el.find('.stats').append @statsView.render().el
-    @_resize()
-    @
+  render() {
+    this.$el.html(this.template());
+    this.$el.find('.stats').append(this.statsView.render().el);
+    this._resize();
+    return this;
+  }
+}
+LogScreensPanel.initClass();
 
-class LogScreenView extends backbone.View
-  className: 'log_screen'
-  template: _.template templates.logScreenView
-  logTemplate: _.template templates.logMessage
-  initialize: (opts) ->
-    {@logScreen, @logScreens} = opts
-    @listenTo @logScreen, 'destroy', => @remove()
-    @listenTo @logScreen, 'new_log', @_addNewLogMessage
-    @forceScroll = true
-    @filter = null
+class LogScreenView extends backbone.View {
+  constructor(...args) {
+    {
+      // Hack: trick Babel/TypeScript into allowing this before super.
+      if (false) { super(); }
+      let thisFn = (() => { this; }).toString();
+      let thisName = thisFn.slice(thisFn.indexOf('{') + 1, thisFn.indexOf(';')).trim();
+      eval(`${thisName} = this;`);
+    }
+    this._close = this._close.bind(this);
+    this._clear = this._clear.bind(this);
+    this.__filter = this.__filter.bind(this);
+    this._filter = this._filter.bind(this);
+    this._addNewLogMessage = this._addNewLogMessage.bind(this);
+    this._recordScroll = this._recordScroll.bind(this);
+    this._renderNewLog = this._renderNewLog.bind(this);
+    this._renderMessages = this._renderMessages.bind(this);
+    super(...args);
+  }
 
-  events:
-    "click .controls .close": "_close"
-    "click .controls .clear": "_clear"
+  static initClass() {
+    this.prototype.className = 'log_screen';
+    this.prototype.template = _.template(templates.logScreenView);
+    this.prototype.logTemplate = _.template(templates.logMessage);
+  
+    this.prototype.events = {
+      "click .controls .close": "_close",
+      "click .controls .clear": "_clear"
+    };
+  }
+  initialize(opts) {
+    ({logScreen: this.logScreen, logScreens: this.logScreens} = opts);
+    this.listenTo(this.logScreen, 'destroy', () => this.remove());
+    this.listenTo(this.logScreen, 'new_log', this._addNewLogMessage);
+    this.forceScroll = true;
+    return this.filter = null;
+  }
 
-  _close: =>
-    @logScreen.logMessages.reset()
-    @logScreen.destroy()
-    false
+  _close() {
+    this.logScreen.logMessages.reset();
+    this.logScreen.destroy();
+    return false;
+  }
 
-  _clear: =>
-    @logScreen.logMessages.reset()
-    @_renderMessages()
-    false
+  _clear() {
+    this.logScreen.logMessages.reset();
+    this._renderMessages();
+    return false;
+  }
 
-  __filter: (e) =>
-    input = $ e.currentTarget
-    _filter_buffer = input.val()
-    wait = =>
-      @_filter _filter_buffer if _filter_buffer is input.val()
-    setTimeout wait, 350
+  __filter(e) {
+    const input = $(e.currentTarget);
+    const _filter_buffer = input.val();
+    const wait = () => {
+      if (_filter_buffer === input.val()) { return this._filter(_filter_buffer); }
+    };
+    return setTimeout(wait, 350);
+  }
 
-  _filter: (filter) =>
-    @filter = if filter then new RegExp "(#{filter})", 'ig' else null
-    @_renderMessages()
+  _filter(filter) {
+    this.filter = filter ? new RegExp(`(${filter})`, 'ig') : null;
+    return this._renderMessages();
+  }
 
-  _addNewLogMessage: (lmessage) =>
-    @logScreen.logMessages.add lmessage
-    @_renderNewLog lmessage
+  _addNewLogMessage(lmessage) {
+    this.logScreen.logMessages.add(lmessage);
+    return this._renderNewLog(lmessage);
+  }
 
-  _recordScroll: (e) =>
-    msgs = @$el.find '.messages'
-    @forceScroll = (msgs.height() + msgs[0].scrollTop) is msgs[0].scrollHeight
+  _recordScroll(e) {
+    const msgs = this.$el.find('.messages');
+    return this.forceScroll = (msgs.height() + msgs[0].scrollTop) === msgs[0].scrollHeight;
+  }
 
-  _renderNewLog: (lmessage) =>
-    _msg = lmessage.get 'message'
-    msg = lmessage.render_message()
-    if @filter
-      msg = if _msg.match @filter then msg.replace @filter, '<span class="highlight">$1</span>' else null
-    if msg
-      @msgs.append @logTemplate
-        lmessage: lmessage
-        msg: msg
-      @$el.find('.messages')[0].scrollTop = @$el.find('.messages')[0].scrollHeight if @forceScroll
+  _renderNewLog(lmessage) {
+    const _msg = lmessage.get('message');
+    let msg = lmessage.render_message();
+    if (this.filter) {
+      msg = _msg.match(this.filter) ? msg.replace(this.filter, '<span class="highlight">$1</span>') : null;
+    }
+    if (msg) {
+      this.msgs.append(this.logTemplate({
+        lmessage,
+        msg
+      })
+      );
+      if (this.forceScroll) { return this.$el.find('.messages')[0].scrollTop = this.$el.find('.messages')[0].scrollHeight; }
+    }
+  }
 
-  _renderMessages: =>
-    @msgs.html ''
-    @logScreen.logMessages.forEach @_renderNewLog
+  _renderMessages() {
+    this.msgs.html('');
+    return this.logScreen.logMessages.forEach(this._renderNewLog);
+  }
 
-  render: ->
-    @$el.html @template
-      logScreens: @logScreens
-    @$el.find('.messages').scroll @_recordScroll
-    @$el.find('.controls .filter input').keyup @__filter
-    @msgs = @$el.find '.msg'
-    @_renderMessages()
-    @
+  render() {
+    this.$el.html(this.template({
+      logScreens: this.logScreens})
+    );
+    this.$el.find('.messages').scroll(this._recordScroll);
+    this.$el.find('.controls .filter input').keyup(this.__filter);
+    this.msgs = this.$el.find('.msg');
+    this._renderMessages();
+    return this;
+  }
+}
+LogScreenView.initClass();
 
-class LogStatsView extends backbone.View
-  template: _.template templates.logStatsView
-  className: 'stats'
-  initialize: (opts) ->
-    {@stats} = opts
-    @rendered = false
-    setInterval (=> @render() if @rendered), 1000
+class LogStatsView extends backbone.View {
+  static initClass() {
+    this.prototype.template = _.template(templates.logStatsView);
+    this.prototype.className = 'stats';
+  }
+  initialize(opts) {
+    ({stats: this.stats} = opts);
+    this.rendered = false;
+    return setInterval((() => { if (this.rendered) { return this.render(); } }), 1000);
+  }
 
-  render: ->
-    @$el.html @template
-      stats: @stats
-    @rendered = true
-    @
+  render() {
+    this.$el.html(this.template({
+      stats: this.stats})
+    );
+    this.rendered = true;
+    return this;
+  }
+}
+LogStatsView.initClass();
 
-exports.WebClient = WebClient
+exports.WebClient = WebClient;
+
+function __guard__(value, transform) {
+  return (typeof value !== 'undefined' && value !== null) ? transform(value) : undefined;
+}

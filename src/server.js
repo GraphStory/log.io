@@ -1,4 +1,15 @@
-### Log.io Log Server
+/*
+ * decaffeinate suggestions:
+ * DS001: Remove Babel/TypeScript constructor workaround
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS201: Simplify complex destructure assignments
+ * DS205: Consider reworking code to avoid use of IIFEs
+ * DS206: Consider reworking classes to avoid initClass
+ * DS207: Consider shorter variations of null checks
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+/* Log.io Log Server
 
 Relays inbound log messages to web clients
 
@@ -20,245 +31,337 @@ Remove a node or stream
 WebServer listens for events emitted by LogServer and
 forwards them to web clients via socket.io
 
-# Usage:
+* Usage:
 logServer = new LogServer port: 28777
 webServer = new WebServer logServer, port: 28778
 webServer.run()
 
-###
+*/
 
-fs = require 'fs'
-net = require 'net'
-http = require 'http'
-https = require 'https'
-io = require 'socket.io'
-events = require 'events'
-winston = require 'winston'
-express = require 'express'
+const fs = require('fs');
+const net = require('net');
+const http = require('http');
+const https = require('https');
+let io = require('socket.io');
+const events = require('events');
+const winston = require('winston');
+const express = require('express');
 
-class _LogObject
-  _type: 'object'
-  _pclass: ->
-  _pcollection: ->
-  constructor: (@logServer, @name, _pairs=[]) ->
-    @logServer.emit "add_#{@_type}", @
-    @pairs = {}
-    @pclass = @_pclass()
-    @pcollection = @_pcollection()
-    @addPair pname for pname in _pairs
+class _LogObject {
+  static initClass() {
+    this.prototype._type = 'object';
+  }
+  _pclass() {}
+  _pcollection() {}
+  constructor(logServer, name, _pairs) {
+    this.logServer = logServer;
+    this.name = name;
+    if (_pairs == null) { _pairs = []; }
+    this.logServer.emit(`add_${this._type}`, this);
+    this.pairs = {};
+    this.pclass = this._pclass();
+    this.pcollection = this._pcollection();
+    for (let pname of Array.from(_pairs)) { this.addPair(pname); }
+  }
 
-  addPair: (pname) ->
-    if not pair = @pairs[pname]
-      if not pair = @pcollection[pname]
-        pair = @pcollection[pname] = new @pclass @logServer, pname
-      pair.pairs[@name] = @
-      @pairs[pname] = pair
-      @logServer.emit "add_#{@_type}_pair", @, pname
+  addPair(pname) {
+    let pair;
+    if (!(pair = this.pairs[pname])) {
+      if (!(pair = this.pcollection[pname])) {
+        pair = (this.pcollection[pname] = new this.pclass(this.logServer, pname));
+      }
+      pair.pairs[this.name] = this;
+      this.pairs[pname] = pair;
+      return this.logServer.emit(`add_${this._type}_pair`, this, pname);
+    }
+  }
 
-  remove: ->
-    @logServer.emit "remove_#{@_type}", @
-    delete p.pairs[@name] for name, p of @pairs
+  remove() {
+    this.logServer.emit(`remove_${this._type}`, this);
+    return (() => {
+      const result = [];
+      for (let name in this.pairs) {
+        const p = this.pairs[name];
+        result.push(delete p.pairs[this.name]);
+      }
+      return result;
+    })();
+  }
 
-  toDict: ->
-    name: @name
-    pairs: (name for name, obj of @pairs)
+  toDict() {
+    let name;
+    return {
+      name: this.name,
+      pairs: ((() => {
+        const result = [];
+        for (name in this.pairs) {
+          const obj = this.pairs[name];
+          result.push(name);
+        }
+        return result;
+      })())
+    };
+  }
+}
+_LogObject.initClass();
 
-class LogNode extends _LogObject
-  _type: 'node'
-  _pclass: -> LogStream
-  _pcollection: -> @logServer.logStreams
+class LogNode extends _LogObject {
+  static initClass() {
+    this.prototype._type = 'node';
+  }
+  _pclass() { return LogStream; }
+  _pcollection() { return this.logServer.logStreams; }
+}
+LogNode.initClass();
 
-class LogStream extends _LogObject
-  _type: 'stream'
-  _pclass: -> LogNode
-  _pcollection: -> @logServer.logNodes
+class LogStream extends _LogObject {
+  static initClass() {
+    this.prototype._type = 'stream';
+  }
+  _pclass() { return LogNode; }
+  _pcollection() { return this.logServer.logNodes; }
+}
+LogStream.initClass();
 
-###
+/*
 LogServer listens for TCP connections.  It parses & validates
 inbound TCP messages, and emits events.
 
-###
-class LogServer extends events.EventEmitter
-  constructor: (config={}) ->
-    {@host, @port} = config
-    @_log = config.logging ? winston
-    @_delimiter = config.delimiter ? '\r\n'
-    @logNodes = {}
-    @logStreams = {}
+*/
+class LogServer extends events.EventEmitter {
+  constructor(config) {
+    {
+      // Hack: trick Babel/TypeScript into allowing this before super.
+      if (false) { super(); }
+      let thisFn = (() => { this; }).toString();
+      let thisName = thisFn.slice(thisFn.indexOf('{') + 1, thisFn.indexOf(';')).trim();
+      eval(`${thisName} = this;`);
+    }
+    this._receive = this._receive.bind(this);
+    this._flush = this._flush.bind(this);
+    if (config == null) { config = {}; }
+    ({host: this.host, port: this.port} = config);
+    this._log = config.logging != null ? config.logging : winston;
+    this._delimiter = config.delimiter != null ? config.delimiter : '\r\n';
+    this.logNodes = {};
+    this.logStreams = {};
+  }
 
-  run: ->
-    # Create TCP listener socket
-    @listener = net.createServer (socket) =>
-      socket._buffer = ''
-      socket.on 'data', (data) => @_receive data, socket
-      socket.on 'error', => @_tearDown socket
-      socket.on 'close', => @_tearDown socket
-    @listener.listen @port, @host
+  run() {
+    // Create TCP listener socket
+    this.listener = net.createServer(socket => {
+      socket._buffer = '';
+      socket.on('data', data => this._receive(data, socket));
+      socket.on('error', () => this._tearDown(socket));
+      return socket.on('close', () => this._tearDown(socket));
+    });
+    return this.listener.listen(this.port, this.host);
+  }
 
-  _tearDown: (socket) ->
-    # Destroy a client socket
-    @_log.error 'Lost TCP connection...'
-    if socket.node
-      @_removeNode socket.node.name
-      delete socket.node
+  _tearDown(socket) {
+    // Destroy a client socket
+    this._log.error('Lost TCP connection...');
+    if (socket.node) {
+      this._removeNode(socket.node.name);
+      return delete socket.node;
+    }
+  }
 
-  _receive: (data, socket) =>
-    part = data.toString()
-    socket._buffer += part
-    @_log.debug "Received TCP message: #{part}"
-    @_flush socket if socket._buffer.indexOf @_delimiter >= 0
+  _receive(data, socket) {
+    const part = data.toString();
+    socket._buffer += part;
+    this._log.debug(`Received TCP message: ${part}`);
+    if (socket._buffer.indexOf(this._delimiter >= 0)) { return this._flush(socket); }
+  }
 
-  _flush: (socket) =>
-    # Handle messages in socket buffer
-    # Pause socket while modifying buffer
-    socket.pause()
-    [msgs..., socket._buffer] = socket._buffer.split @_delimiter
-    socket.resume()
-    @_handle socket, msg for msg in msgs
+  _flush(socket) {
+    // Handle messages in socket buffer
+    // Pause socket while modifying buffer
+    let adjustedLength, array, msgs;
+    socket.pause();
+    array = socket._buffer.split(this._delimiter),
+      adjustedLength = Math.max(array.length, 1),
+      msgs = array.slice(0, adjustedLength - 1),
+      socket._buffer = array[adjustedLength - 1];
+    socket.resume();
+    return Array.from(msgs).map((msg) => this._handle(socket, msg));
+  }
 
-  _handle: (socket, msg) ->
-    @_log.debug "Handling message: #{msg}"
-    [mtype, args...] = msg.split '|'
-    switch mtype
-      when '+log' then @_newLog args...
-      when '+node' then @_addNode args...
-      when '+stream' then @_addStream args...
-      when '-node' then @_removeNode args...
-      when '-stream' then @_removeStream args...
-      when '+bind' then @_bindNode socket, args...
-      else @_log.error "Invalid TCP message: #{msg}"
+  _handle(socket, msg) {
+    this._log.debug(`Handling message: ${msg}`);
+    const [mtype, ...args] = Array.from(msg.split('|'));
+    switch (mtype) {
+      case '+log': return this._newLog(...Array.from(args || []));
+      case '+node': return this._addNode(...Array.from(args || []));
+      case '+stream': return this._addStream(...Array.from(args || []));
+      case '-node': return this._removeNode(...Array.from(args || []));
+      case '-stream': return this._removeStream(...Array.from(args || []));
+      case '+bind': return this._bindNode(socket, ...Array.from(args));
+      default: return this._log.error(`Invalid TCP message: ${msg}`);
+    }
+  }
 
-  _addNode: (nname, snames='') ->
-    @__add nname, snames, @logNodes, LogNode, 'node'
+  _addNode(nname, snames) {
+    if (snames == null) { snames = ''; }
+    return this.__add(nname, snames, this.logNodes, LogNode, 'node');
+  }
 
-  _addStream: (sname, nnames='') ->
-    @__add sname, nnames, @logStreams, LogStream, 'stream'
+  _addStream(sname, nnames) {
+    if (nnames == null) { nnames = ''; }
+    return this.__add(sname, nnames, this.logStreams, LogStream, 'stream');
+  }
 
-  _removeNode: (nname) ->
-    @__remove nname, @logNodes, 'node'
+  _removeNode(nname) {
+    return this.__remove(nname, this.logNodes, 'node');
+  }
 
-  _removeStream: (sname) ->
-    @__remove sname, @logStreams, 'stream'
+  _removeStream(sname) {
+    return this.__remove(sname, this.logStreams, 'stream');
+  }
 
-  _newLog: (sname, nname, logLevel, message...) ->
-    message = message.join '|'
-    @_log.debug "Log message: (#{sname}, #{nname}, #{logLevel}) #{message}"
-    node = @logNodes[nname] or @_addNode nname, sname
-    stream = @logStreams[sname] or @_addStream sname, nname
-    @emit 'new_log', stream, node, logLevel, message
+  _newLog(sname, nname, logLevel, ...message) {
+    message = message.join('|');
+    this._log.debug(`Log message: (${sname}, ${nname}, ${logLevel}) ${message}`);
+    const node = this.logNodes[nname] || this._addNode(nname, sname);
+    const stream = this.logStreams[sname] || this._addStream(sname, nname);
+    return this.emit('new_log', stream, node, logLevel, message);
+  }
 
-  __add: (name, pnames, _collection, _objClass, objName) ->
-    @_log.info "Adding #{objName}: #{name} (#{pnames})"
-    pnames = pnames.split ','
-    obj = _collection[name] = _collection[name] or new _objClass @, name, pnames
-    obj.addPair p for p in pnames when not obj.pairs[p]
+  __add(name, pnames, _collection, _objClass, objName) {
+    this._log.info(`Adding ${objName}: ${name} (${pnames})`);
+    pnames = pnames.split(',');
+    const obj = (_collection[name] = _collection[name] || new _objClass(this, name, pnames));
+    return Array.from(pnames).filter((p) => !obj.pairs[p]).map((p) => obj.addPair(p));
+  }
 
-  __remove: (name, _collection, objType) ->
-    if obj = _collection[name]
-      @_log.info "Removing #{objType}: #{name}"
-      obj.remove()
-      delete _collection[name]
+  __remove(name, _collection, objType) {
+    let obj;
+    if (obj = _collection[name]) {
+      this._log.info(`Removing ${objType}: ${name}`);
+      obj.remove();
+      return delete _collection[name];
+    }
+  }
 
-  _bindNode: (socket, obj, nname) ->
-    if node = @logNodes[nname]
-      @_log.info "Binding node '#{nname}' to TCP socket"
-      socket.node = node
-      @_ping socket
+  _bindNode(socket, obj, nname) {
+    let node;
+    if (node = this.logNodes[nname]) {
+      this._log.info(`Binding node '${nname}' to TCP socket`);
+      socket.node = node;
+      return this._ping(socket);
+    }
+  }
 
-  _ping: (socket) ->
-    if socket.node
-      socket.write 'ping'
-      setTimeout (=> @_ping socket), 2000
+  _ping(socket) {
+    if (socket.node) {
+      socket.write('ping');
+      return setTimeout((() => this._ping(socket)), 2000);
+    }
+  }
+}
 
 
 
-###
+/*
 WebServer relays LogServer events to web clients via socket.io.
 
-###
+*/
 
-class WebServer
-  constructor: (@logServer, config) ->
-    {@host, @port, @auth} = config
-    {@logNodes, @logStreams} = @logServer
-    @restrictSocket = config.restrictSocket ? '*:*'
-    @_log = config.logging ? winston
-    # Create express server
-    app = @_buildServer config
-    @http = @_createServer config, app
+class WebServer {
+  constructor(logServer, config) {
+    this.logServer = logServer;
+    ({host: this.host, port: this.port, auth: this.auth} = config);
+    ({logNodes: this.logNodes, logStreams: this.logStreams} = this.logServer);
+    this.restrictSocket = config.restrictSocket != null ? config.restrictSocket : '*:*';
+    this._log = config.logging != null ? config.logging : winston;
+    // Create express server
+    const app = this._buildServer(config);
+    this.http = this._createServer(config, app);
+  }
 
-  _buildServer: (config) ->
-    app = express()
-    if @auth?
-      app.use express.basicAuth @auth.user, @auth.pass
-    if config.restrictHTTP
-      ips = new RegExp config.restrictHTTP.join '|'
-      app.all '/', (req, res, next) =>
-        if not req.ip.match ips
-          return res.send 403, "Your IP (#{req.ip}) is not allowed."
-        next()
-    staticPath = config.staticPath ? __dirname + '/../'
-    app.use express.static staticPath
+  _buildServer(config) {
+    const app = express();
+    if (this.auth != null) {
+      app.use(express.basicAuth(this.auth.user, this.auth.pass));
+    }
+    if (config.restrictHTTP) {
+      const ips = new RegExp(config.restrictHTTP.join('|'));
+      app.all('/', (req, res, next) => {
+        if (!req.ip.match(ips)) {
+          return res.send(403, `Your IP (${req.ip}) is not allowed.`);
+        }
+        return next();
+      });
+    }
+    const staticPath = config.staticPath != null ? config.staticPath : __dirname + '/../';
+    return app.use(express.static(staticPath));
+  }
 
-  _createServer: (config, app) ->
-    if config.ssl
-      return https.createServer {
-        key: fs.readFileSync config.ssl.key
-        cert: fs.readFileSync config.ssl.cert
-      }, app
-    else
-      return http.createServer app
+  _createServer(config, app) {
+    if (config.ssl) {
+      return https.createServer({
+        key: fs.readFileSync(config.ssl.key),
+        cert: fs.readFileSync(config.ssl.cert)
+      }, app);
+    } else {
+      return http.createServer(app);
+    }
+  }
 
-  run: ->
-    @_log.info 'Starting Log.io Web Server...'
-    @logServer.run()
-    io = io.listen @http.listen @port, @host
-    io.set 'log level', 1
-    io.set 'origins', @restrictSocket
-    @listener = io.sockets
+  run() {
+    this._log.info('Starting Log.io Web Server...');
+    this.logServer.run();
+    io = io.listen(this.http.listen(this.port, this.host));
+    io.set('log level', 1);
+    io.set('origins', this.restrictSocket);
+    this.listener = io.sockets;
 
-    _on = (args...) => @logServer.on args...
-    _emit = (_event, msg) =>
-      @_log.debug "Relaying: #{_event}"
-      @listener.emit _event, msg
+    const _on = (...args) => this.logServer.on(...Array.from(args || []));
+    const _emit = (_event, msg) => {
+      this._log.debug(`Relaying: ${_event}`);
+      return this.listener.emit(_event, msg);
+    };
 
-    # Bind events from LogServer to web client
-    _on 'add_node', (node) ->
-      _emit 'add_node', node.toDict()
-    _on 'add_stream', (stream) ->
-      _emit 'add_stream', stream.toDict()
-    _on 'add_stream_pair', (stream, nname) ->
-      _emit 'add_pair', {stream: stream.name, node: nname}
-    _on 'add_node_pair', (node, sname) ->
-      _emit 'add_pair', {stream: sname, node: node.name}
-    _on 'remove_node', (node) ->
-      _emit 'remove_node', node.toDict()
-    _on 'remove_stream', (stream) ->
-      _emit 'remove_stream', stream.toDict()
+    // Bind events from LogServer to web client
+    _on('add_node', node => _emit('add_node', node.toDict()));
+    _on('add_stream', stream => _emit('add_stream', stream.toDict()));
+    _on('add_stream_pair', (stream, nname) => _emit('add_pair', {stream: stream.name, node: nname}));
+    _on('add_node_pair', (node, sname) => _emit('add_pair', {stream: sname, node: node.name}));
+    _on('remove_node', node => _emit('remove_node', node.toDict()));
+    _on('remove_stream', stream => _emit('remove_stream', stream.toDict()));
 
-    # Bind new log event from Logserver to web client
-    _on 'new_log', (stream, node, level, message) =>
-      _emit 'ping', {stream: stream.name, node: node.name}
-      # Only send message to web clients watching logStream
-      @listener.in("#{stream.name}:#{node.name}").emit 'new_log',
-        stream: stream.name
-        node: node.name
-        level: level
-        message: message
+    // Bind new log event from Logserver to web client
+    _on('new_log', (stream, node, level, message) => {
+      _emit('ping', {stream: stream.name, node: node.name});
+      // Only send message to web clients watching logStream
+      return this.listener.in(`${stream.name}:${node.name}`).emit('new_log', {
+        stream: stream.name,
+        node: node.name,
+        level,
+        message
+      }
+      );
+    });
 
-    # Bind web client connection, events to web server
-    @listener.on 'connection', (wclient) =>
-      wclient.emit 'add_node', node.toDict() for n, node of @logNodes
-      wclient.emit 'add_stream', stream.toDict() for s, stream of @logStreams
-      for n, node of @logNodes
-        for s, stream of node.pairs
-          wclient.emit 'add_pair', {stream: s, node: n}
-      wclient.emit 'initialized'
-      wclient.on 'watch', (pid) ->
-        wclient.join pid
-      wclient.on 'unwatch', (pid) ->
-        wclient.leave pid
-    @_log.info 'Server started, listening...'
+    // Bind web client connection, events to web server
+    this.listener.on('connection', wclient => {
+      let node, stream;
+      for (var n in this.logNodes) { node = this.logNodes[n]; wclient.emit('add_node', node.toDict()); }
+      for (var s in this.logStreams) { stream = this.logStreams[s]; wclient.emit('add_stream', stream.toDict()); }
+      for (n in this.logNodes) {
+        node = this.logNodes[n];
+        for (s in node.pairs) {
+          stream = node.pairs[s];
+          wclient.emit('add_pair', {stream: s, node: n});
+        }
+      }
+      wclient.emit('initialized');
+      wclient.on('watch', pid => wclient.join(pid));
+      return wclient.on('unwatch', pid => wclient.leave(pid));
+    });
+    return this._log.info('Server started, listening...');
+  }
+}
 
-exports.LogServer = LogServer
-exports.WebServer = WebServer
+exports.LogServer = LogServer;
+exports.WebServer = WebServer;
