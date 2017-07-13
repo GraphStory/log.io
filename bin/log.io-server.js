@@ -14,7 +14,7 @@ const logging = new winston.Logger({
     level: 'error'
   })]
 });
-const homeDir = process.env[((left = process.platform === 'win32')) != null ? left : {'USERPROFILE' : 'HOME'}];
+const homeDir = process.env['HOME'];
 const webConf = require(homeDir + '/.log.io/web_server.conf').config;
 webConf.logging = logging;
 const logConf = require(homeDir + '/.log.io/log_server.conf').config;

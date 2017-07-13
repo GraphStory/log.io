@@ -14,7 +14,7 @@ const logging = new winston.Logger({
     level: 'error'
   })]
 });
-const homeDir = process.env[((left = process.platform === 'win32')) != null ? left : {'USERPROFILE' : 'HOME'}];
+const homeDir = process.env["HOME"];
 const conf = require(homeDir + '/.log.io/harvester.conf').config;
 conf.logging = logging;
 let harvester = require('../index.js');
