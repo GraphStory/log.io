@@ -1,78 +1,106 @@
-{spawn, exec} = require 'child_process'
-fs = require 'fs'
+/*
+ * decaffeinate suggestions:
+ * DS101: Remove unnecessary use of Array.from
+ * DS102: Remove unnecessary code created because of implicit returns
+ * DS205: Consider reworking code to avoid use of IIFEs
+ * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
+ */
+const {spawn, exec} = require('child_process');
+const fs = require('fs');
 
-ENV = '/usr/bin/env'
-BROWSERIFY = "#{ ENV } browserify"
-COFFEE = "#{ ENV } coffee"
-MOCHA = "#{ ENV } mocha"
-LESS = "#{ ENV } lessc"
-NODE = "#{ ENV } node"
+const ENV = '/usr/bin/env';
+const BROWSERIFY = `${ ENV } browserify`;
+const COFFEE = `${ ENV } coffee`;
+const MOCHA = `${ ENV } mocha`;
+const LESS = `${ ENV } lessc`;
+const NODE = `${ ENV } node`;
 
-TEMPLATE_SRC = "#{ __dirname }/templates"
-TEMPLATE_OUTPUT = "#{ __dirname }/src/templates.coffee"
+const TEMPLATE_SRC = `${ __dirname }/templates`;
+const TEMPLATE_OUTPUT = `${ __dirname }/src/templates.coffee`;
 
-task 'build', "Builds Log.io package", ->
-  invoke 'templates'
-  invoke 'compile'
-  invoke 'less'
-  invoke 'browserify'
-  # Ensure browserify has completed
-  setTimeout (-> invoke 'func_test'), 2000
+task('build', "Builds Log.io package", function() {
+  invoke('templates');
+  invoke('compile');
+  invoke('less');
+  invoke('browserify');
+  // Ensure browserify has completed
+  return setTimeout((() => invoke('func_test')), 2000);
+});
 
-task 'compile', "Compiles CoffeeScript src/*.coffee to lib/*.js", ->
-  console.log "Compiling src/*.coffee to lib/*.js"
-  exec "#{COFFEE} --compile --output #{__dirname}/lib/ #{__dirname}/src/", (err, stdout, stderr) ->
-    throw err if err
-    console.log stdout + stderr if stdout + stderr
+task('compile', "Compiles CoffeeScript src/*.coffee to lib/*.js", function() {
+  console.log("Compiling src/*.coffee to lib/*.js");
+  return exec(`${COFFEE} --compile --output ${__dirname}/lib/ ${__dirname}/src/`, function(err, stdout, stderr) {
+    if (err) { throw err; }
+    if (stdout + stderr) { return console.log(stdout + stderr); }
+  });
+});
 
-task 'browserify', "Compiles client.coffee to browser-friendly JS", ->
-  console.log "Browserifying src/client.coffee to lib/log.io.js"
-  exec "#{BROWSERIFY} src/client.coffee --exports process,require -o #{ __dirname }/lib/log.io.js", (err, stdout, stderr) ->
-    console.log stdout + stderr if err
+task('browserify', "Compiles client.coffee to browser-friendly JS", function() {
+  console.log("Browserifying src/client.coffee to lib/log.io.js");
+  return exec(`${BROWSERIFY} src/client.coffee --exports process,require -o ${ __dirname }/lib/log.io.js`, function(err, stdout, stderr) {
+    if (err) { return console.log(stdout + stderr); }
+  });
+});
 
-task 'less', "Compiles less templates to CSS", ->
-  console.log "Compiling src/less/* to lib/log.io.css"
-  exec "#{LESS} #{__dirname}/src/less/log.io.less -compress -o #{__dirname}/lib/log.io.css", (err, stdout, stderr) ->
-    throw err if err
-    console.log stdout + stderr if stdout + stderr
+task('less', "Compiles less templates to CSS", function() {
+  console.log("Compiling src/less/* to lib/log.io.css");
+  return exec(`${LESS} ${__dirname}/src/less/log.io.less -compress -o ${__dirname}/lib/log.io.css`, function(err, stdout, stderr) {
+    if (err) { throw err; }
+    if (stdout + stderr) { return console.log(stdout + stderr); }
+  });
+});
 
-task 'templates', "Compiles templates/*.html to src/templates.coffee", ->
-  console.log "Generating src/templates.coffee from templates/*.html"
-  buildTemplate()
+task('templates', "Compiles templates/*.html to src/templates.coffee", function() {
+  console.log("Generating src/templates.coffee from templates/*.html");
+  return buildTemplate();
+});
 
-task 'ensure:configuration', "Ensures that config files exist in ~/.log.io/", ->
-  console.log "Creating ~/.log.io/ for configuration files."
-  console.log "If this fails, run npm using a specific user: npm install -g log.io --user 'ubuntu'"
-  homedir = process.env[if process.platform is 'win32' then 'USERPROFILE' else 'HOME']
-  ldir = homedir + '/.log.io/'
-  fs.mkdirSync ldir if not fs.existsSync ldir
-  for c in ['harvester', 'log_server', 'web_server']
-    path = ldir + "#{c}.conf"
-    copyFile "./conf/#{c}.conf", path if not fs.existsSync path
+task('ensure:configuration', "Ensures that config files exist in ~/.log.io/", function() {
+  console.log("Creating ~/.log.io/ for configuration files.");
+  console.log("If this fails, run npm using a specific user: npm install -g log.io --user 'ubuntu'");
+  const homedir = process.env[process.platform === 'win32' ? 'USERPROFILE' : 'HOME'];
+  const ldir = homedir + '/.log.io/';
+  if (!fs.existsSync(ldir)) { fs.mkdirSync(ldir); }
+  return (() => {
+    const result = [];
+    for (let c of ['harvester', 'log_server', 'web_server']) {
+      const path = ldir + `${c}.conf`;
+      if (!fs.existsSync(path)) { result.push(copyFile(`./conf/${c}.conf`, path)); } else {
+        result.push(undefined);
+      }
+    }
+    return result;
+  })();
+});
 
-task 'func_test', "Compiles & runs functional tests in test/", ->
-  console.log "Compiling test/*.coffee to test/lib/*.js..."
-  exec "#{COFFEE} --compile --output #{__dirname}/test/lib/ #{__dirname}/test/", (err, stdout, stderr) ->
-    throw err if err
-    console.log stdout + stderr if stdout + stderr
-    console.log "Running tests..."
-    exec "#{MOCHA} --reporter spec test/lib/functional.js", (err, stdout, stderr) ->
-      throw err if err
-      console.log stdout + stderr if stdout + stderr
+task('func_test', "Compiles & runs functional tests in test/", function() {
+  console.log("Compiling test/*.coffee to test/lib/*.js...");
+  return exec(`${COFFEE} --compile --output ${__dirname}/test/lib/ ${__dirname}/test/`, function(err, stdout, stderr) {
+    if (err) { throw err; }
+    if (stdout + stderr) { console.log(stdout + stderr); }
+    console.log("Running tests...");
+    return exec(`${MOCHA} --reporter spec test/lib/functional.js`, function(err, stdout, stderr) {
+      if (err) { throw err; }
+      if (stdout + stderr) { return console.log(stdout + stderr); }
+    });
+  });
+});
 
-copyFile = (from, to) ->
-  fs.createReadStream(from).pipe fs.createWriteStream to
+var copyFile = (from, to) => fs.createReadStream(from).pipe(fs.createWriteStream(to));
 
-exportify = (f) ->
-  templateName = f.replace '.html', ''
-  templateExportName = templateName.replace '-', '.'
-  templateFilePath = "#{ TEMPLATE_SRC }/#{ f }"
-  body = fs.readFileSync templateFilePath, 'utf-8'
-  content = "exports.#{ templateExportName } = \"\"\"#{ body }\"\"\""
+const exportify = function(f) {
+  let content;
+  const templateName = f.replace('.html', '');
+  const templateExportName = templateName.replace('-', '.');
+  const templateFilePath = `${ TEMPLATE_SRC }/${ f }`;
+  const body = fs.readFileSync(templateFilePath, 'utf-8');
+  return content = `exports.${ templateExportName } = \"\"\"${ body }\"\"\"`;
+};
 
-buildTemplate = ->
-  files = fs.readdirSync TEMPLATE_SRC
-  templateBlocks = (exportify f for f in files)
-  content = '# TEMPLATES.COFFEE IS AUTO-GENERATED. CHANGES WILL BE LOST!\n'
-  content += templateBlocks.join '\n\n'
-  fs.writeFileSync TEMPLATE_OUTPUT, content, 'utf-8'
+var buildTemplate = function() {
+  const files = fs.readdirSync(TEMPLATE_SRC);
+  const templateBlocks = (Array.from(files).map((f) => exportify(f)));
+  let content = '# TEMPLATES.COFFEE IS AUTO-GENERATED. CHANGES WILL BE LOST!\n';
+  content += templateBlocks.join('\n\n');
+  return fs.writeFileSync(TEMPLATE_OUTPUT, content, 'utf-8');
+};
