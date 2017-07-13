@@ -1,0 +1,15 @@
+#!/usr/bin/env node
+
+const { resolve } = require("path");
+const winston = require('winston');
+const { LogHarvester } = require('../index.js');
+
+const config = require(resolve(process.cwd(), process.argv[2]));
+config.logging = new winston.Logger({
+  transports: [ new winston.transports.Console({
+    level: 'error'
+  })]
+});
+
+harvester = new LogHarvester(config);
+harvester.run();

@@ -132,13 +132,7 @@ inbound TCP messages, and emits events.
 */
 class LogServer extends events.EventEmitter {
   constructor(config) {
-    {
-      // Hack: trick Babel/TypeScript into allowing this before super.
-      if (false) { super(); }
-      let thisFn = (() => { this; }).toString();
-      let thisName = thisFn.slice(thisFn.indexOf('{') + 1, thisFn.indexOf(';')).trim();
-      eval(`${thisName} = this;`);
-    }
+    super();
     this._receive = this._receive.bind(this);
     this._flush = this._flush.bind(this);
     if (config == null) { config = {}; }
@@ -278,14 +272,11 @@ class WebServer {
     this._log = config.logging != null ? config.logging : winston;
     // Create express server
     const app = this._buildServer(config);
-    this.http = this._createServer(config, app);
+    this.http = http.createServer(app)
   }
 
   _buildServer(config) {
     const app = express();
-    if (this.auth != null) {
-      app.use(express.basicAuth(this.auth.user, this.auth.pass));
-    }
     if (config.restrictHTTP) {
       const ips = new RegExp(config.restrictHTTP.join('|'));
       app.all('/', (req, res, next) => {
@@ -295,19 +286,8 @@ class WebServer {
         return next();
       });
     }
-    const staticPath = config.staticPath != null ? config.staticPath : __dirname + '/../';
+    const staticPath = __dirname + '/../dist';
     return app.use(express.static(staticPath));
-  }
-
-  _createServer(config, app) {
-    if (config.ssl) {
-      return https.createServer({
-        key: fs.readFileSync(config.ssl.key),
-        cert: fs.readFileSync(config.ssl.cert)
-      }, app);
-    } else {
-      return http.createServer(app);
-    }
   }
 
   run() {

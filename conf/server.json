@@ -1,0 +1,14 @@
+{
+    "log": {
+        "host": "0.0.0.0",
+        "port": 28777
+    },
+    "web": {
+        "host": "0.0.0.0",
+        "port": 28778,
+        "restrictSocket": "*:*",
+        "restrictHTTP": [
+            "127.0.*"
+        ]
+    }
+}

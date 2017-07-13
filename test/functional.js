@@ -19,12 +19,24 @@ const chai = require('chai');
 const _ = require('underscore');
 const winston = require('winston');
 const sinon_chai = require('sinon-chai');
+const jsdom = require("jsdom");
+
 chai.use(sinon_chai);
 const should = chai.should();
+const dom = new jsdom.JSDOM(`
+<!DOCTYPE html>
+<html>
+  <body>
+    <div id="web_client"></div>
+  </body>
+</html>
+`);
 
-const {LogHarvester} = require('../../lib/harvester.js');
-const {LogServer, WebServer} = require('../../lib/server.js');
-const {WebClient} = require('../../lib/client.js');
+const {LogHarvester} = require('../src/harvester');
+const {LogServer, WebServer} = require('../src/server');
+const {createClient} = require('../src/client');
+const WebClient = createClient(dom.window);
+
 const logging = new winston.Logger({
   transports: [ new winston.transports.Console({level: 'error'})]});
 
@@ -115,7 +127,7 @@ const webClient = new WebClient({host: 'http://0.0.0.0:28772'});
 describe('WebClient', () =>
   it('waits for server connection...', connected =>
     webClient.socket.on('initialized', function() {
-
+      console.log("hihi");
       describe('WebClient state', function() {
         it('should be notified of registered nodes & streams', function() {
           webClient.logNodes.should.have.length(2);

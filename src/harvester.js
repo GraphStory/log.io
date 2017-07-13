@@ -48,13 +48,7 @@ changes, extracts new log messages, and emits 'new_log' events.
 */
 class LogStream extends events.EventEmitter {
   constructor(name, paths, _log) {
-    {
-      // Hack: trick Babel/TypeScript into allowing this before super.
-      if (false) { super(); }
-      let thisFn = (() => { this; }).toString();
-      let thisName = thisFn.slice(thisFn.indexOf('{') + 1, thisFn.indexOf(';')).trim();
-      eval(`${thisName} = this;`);
-    }
+    super();
     this.name = name;
     this.paths = paths;
     this._log = _log;
@@ -156,7 +150,7 @@ class LogHarvester {
 
   _sendLog(stream, msg) {
     this._log.debug(`Sending log: (${stream.name}) ${msg}`);
-    return this._send('+log', stream.name, this.nodeName, 'info', msg); 
+    return this._send('+log', stream.name, this.nodeName, 'info', msg);
   }
 
   _announce() {

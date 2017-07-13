@@ -1,0 +1,21 @@
+#!/usr/bin/env node
+
+const { resolve } = require("path");
+const winston = require('winston');
+const { LogServer, WebServer} = require('../index.js');
+
+const config = require(resolve(process.cwd(), process.argv[2]));
+
+const logging = new winston.Logger({
+  transports: [ new winston.transports.Console({
+    level: 'error'
+  })]
+});
+
+const webConf = Object.assign(config.web, { logging });
+const logConf = Object.assign(config.log, { logging });
+
+const logServer = new LogServer(logConf);
+const webServer = new WebServer(logServer, webConf);
+
+webServer.run();
