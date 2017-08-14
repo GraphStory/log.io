@@ -15,7 +15,7 @@ const logging = new winston.Logger({
 const webConf = Object.assign(config.web, { logging });
 const logConf = Object.assign(config.log, { logging });
 
-logConf.staticPath = '/var/lib/log.io/dist'
+webConf.staticPath = '/var/lib/log.io/dist'
 // webConf.staticPath = '/app/dist'
 
 const logServer = new LogServer(logConf);
