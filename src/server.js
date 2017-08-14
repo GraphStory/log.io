@@ -291,6 +291,7 @@ class WebServer {
       });
     }
     const staticPath = config.staticPath != null ? config.staticPath : __dirname + '/../';
+    console.log(staticPath)
     return app.use(express.static(staticPath));
   }
 
