@@ -45,5 +45,6 @@
     "build": "rm -rf dist && mkdir dist && cp index.html dist/index.html && npm run build:css && npm run build:bundle",
     "build:css": "lessc src/less/log.io.less -compress dist/log.io.css",
     "build:bundle": "browserify browser.js --exports process,require -o dist/log.io.js"
-  }
+  },
+  "private": true
 }
