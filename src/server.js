@@ -1,5 +1,3 @@
-// TODO: This file was created by bulk-decaffeinate.
-// Sanity-check the conversion and remove this comment.
 /*
  * decaffeinate suggestions:
  * DS001: Remove Babel/TypeScript constructor workaround
@@ -119,6 +117,7 @@ LogNode.initClass();
 class LogStream extends _LogObject {
   static initClass() {
     this.prototype._type = 'stream';
+    this.prototype._history = [];
   }
   _pclass() { return LogNode; }
   _pcollection() { return this.logServer.logNodes; }
@@ -132,7 +131,9 @@ inbound TCP messages, and emits events.
 */
 class LogServer extends events.EventEmitter {
   constructor(config) {
-    super();
+    {
+      super(config)
+    }
     this._receive = this._receive.bind(this);
     this._flush = this._flush.bind(this);
     if (config == null) { config = {}; }
@@ -272,11 +273,14 @@ class WebServer {
     this._log = config.logging != null ? config.logging : winston;
     // Create express server
     const app = this._buildServer(config);
-    this.http = http.createServer(app)
+    this.http = this._createServer(config, app);
   }
 
   _buildServer(config) {
     const app = express();
+    if (this.auth != null) {
+      app.use(express.basicAuth(this.auth.user, this.auth.pass));
+    }
     if (config.restrictHTTP) {
       const ips = new RegExp(config.restrictHTTP.join('|'));
       app.all('/', (req, res, next) => {
@@ -286,17 +290,32 @@ class WebServer {
         return next();
       });
     }
-    const staticPath = __dirname + '/../dist';
+    const staticPath = config.staticPath != null ? config.staticPath : __dirname + '/../';
     return app.use(express.static(staticPath));
   }
 
+  _createServer(config, app) {
+    if (config.ssl) {
+      return https.createServer({
+        key: fs.readFileSync(config.ssl.key),
+        cert: fs.readFileSync(config.ssl.cert)
+      }, app);
+    } else {
+      return http.createServer(app);
+    }
+  }
+
   run() {
+    let logObject;
     this._log.info('Starting Log.io Web Server...');
     this.logServer.run();
     io = io.listen(this.http.listen(this.port, this.host));
     io.set('log level', 1);
     io.set('origins', this.restrictSocket);
     this.listener = io.sockets;
+
+    const _logger = this._log;
+    const { logStreams } = this;
 
     const _on = (...args) => this.logServer.on(...Array.from(args || []));
     const _emit = (_event, msg) => {
@@ -315,19 +334,27 @@ class WebServer {
     // Bind new log event from Logserver to web client
     _on('new_log', (stream, node, level, message) => {
       _emit('ping', {stream: stream.name, node: node.name});
-      // Only send message to web clients watching logStream
-      return this.listener.in(`${stream.name}:${node.name}`).emit('new_log', {
+      logObject = {
         stream: stream.name,
         node: node.name,
         level,
         message
+      };
+
+      // Add the log to the stream history
+      stream._history.push(logObject);
+      while (stream._history.length > 100) {
+        stream._history.shift();
       }
-      );
+
+      // Only send message to web clients watching logStream
+      return this.listener.in(`${stream.name}:${node.name}`).emit('new_log', logObject);
     });
 
     // Bind web client connection, events to web server
     this.listener.on('connection', wclient => {
       let node, stream;
+      _logger.info('New connection!');
       for (var n in this.logNodes) { node = this.logNodes[n]; wclient.emit('add_node', node.toDict()); }
       for (var s in this.logStreams) { stream = this.logStreams[s]; wclient.emit('add_stream', stream.toDict()); }
       for (n in this.logNodes) {
@@ -338,9 +365,26 @@ class WebServer {
         }
       }
       wclient.emit('initialized');
-      wclient.on('watch', pid => wclient.join(pid));
+      wclient.on('watch', function(pid) {
+        wclient.join(pid);
+        // Send history
+        const sname = (pid.split(':'))[0];
+        stream = logStreams[sname];
+        if (stream) {
+          _logger.info('sending history items', stream._history.length);
+          return (() => {
+            const result = [];
+            for (n in stream._history) {
+              logObject = stream._history[n];
+              result.push(wclient.emit('new_log', logObject));
+            }
+            return result;
+          })();
+        }
+      });
       return wclient.on('unwatch', pid => wclient.leave(pid));
     });
+
     return this._log.info('Server started, listening...');
   }
 }

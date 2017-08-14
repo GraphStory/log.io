@@ -43,7 +43,6 @@
     "log.io-harvester": "./bin/log.io-harvester"
   },
   "scripts": {
-    "private": "yarn pack && yarn global add ./log.io-v0.3.4.tgz",
     "build": "rm -rf dist && mkdir dist && cp index.html dist/index.html && npm run build:css && npm run build:bundle",
     "build:css": "lessc src/less/log.io.less -compress dist/log.io.css",
     "build:bundle": "browserify browser.js --exports process,require -o dist/log.io.js"
