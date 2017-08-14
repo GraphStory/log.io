@@ -23,7 +23,6 @@
     "express": "^4.15.3",
     "global": "^4.3.2",
     "jquery": "^3.2.1",
-    "log.io": "./log.io-v0.3.4.tgz",
     "socket.io": "^2.0.3",
     "socket.io-client": "^2.0.3",
     "underscore": "^1.8.3",
@@ -44,7 +43,7 @@
     "log.io-harvester": "./bin/log.io-harvester"
   },
   "scripts": {
-    "private": "yarn link && yarn add global",
+    "private": "yarn pack && yarn global add ./log.io-v0.3.4.tgz",
     "build": "rm -rf dist && mkdir dist && cp index.html dist/index.html && npm run build:css && npm run build:bundle",
     "build:css": "lessc src/less/log.io.less -compress dist/log.io.css",
     "build:bundle": "browserify browser.js --exports process,require -o dist/log.io.js"
